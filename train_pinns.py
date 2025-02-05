@@ -108,7 +108,150 @@ nnd_wall_internal_data = 2*(nd_wall_internal_data - np.array([ndx_max, ndy_max, 
                               np.array([ndx_max-ndx_min, ndy_max-ndy_min, ndt_max-ndt_min])) - 1.0
 
 nnd_indi_boundary_data = {}
-print(nd_indi_boundary_data)
-for i in indi_boundary_data:
-    nnd_indi_boundary_data[i] = 2*(nd_indi_boundary_data - np.array([ndx_max, ndy_max, ndt_max])/ \
+for i in nd_indi_boundary_data:
+    nnd_indi_boundary_data[i] = 2*(nd_indi_boundary_data[i] - np.array([ndx_max, ndy_max, ndt_max])/ \
                               np.array([ndx_max-ndx_min, ndy_max-ndy_min, ndt_max-ndt_min])) - 1.0
+
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", device)
+
+nnd_new_block_internal_data = torch.tensor(nnd_new_block_internal_data, dtype=torch.float32).to(device)
+nnd_wall_internal_data = torch.tensor(nnd_wall_internal_data, dtype=torch.float32).to(device)
+# boundary_data = torch.tensor(boundary_data, dtype=torch.float32).to(device)
+
+nnd_boundary_data_left = torch.tensor(nnd_indi_boundary_data["left"], dtype=torch.float32).to(device)
+nnd_boundary_data_right = torch.tensor(nnd_indi_boundary_data["right"], dtype=torch.float32).to(device)
+nnd_boundary_data_shared = torch.tensor(nnd_indi_boundary_data["shared"], dtype=torch.float32).to(device)
+nnd_boundary_data_top_left = torch.tensor(nnd_indi_boundary_data["top_left"], dtype=torch.float32).to(device)
+nnd_boundary_data_top_right = torch.tensor(nnd_indi_boundary_data["top_right"], dtype=torch.float32).to(device)
+if consider_bottom_as_boundary:
+    nnd_boundary_data_bottom = torch.tensor(nnd_indi_boundary_data["bottom"], dtype=torch.float32).to(device)
+
+# Ensure x requires gradient
+nnd_new_block_internal_data.requires_grad_(True)
+nnd_wall_internal_data.requires_grad_(True)
+# boundary_data.requires_grad_(True)
+nnd_boundary_data_left.requires_grad_(True)
+nnd_boundary_data_right.requires_grad_(True)
+nnd_boundary_data_shared.requires_grad_(True)
+nnd_boundary_data_top_left.requires_grad_(True)
+nnd_boundary_data_top_right.requires_grad_(True)
+if consider_bottom_as_boundary:
+    nnd_boundary_data_bottom.requires_grad_(True)
+
+
+
+###############################################################################
+# Initialize and Train PINN
+###############################################################################
+layers = [3, 20, 40, 40, 20, 1]  # [input_dim=3, hidden_layers..., output_dim=1]
+model = PINN(layers).to(device)
+
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+
+
+# Example: reducing epochs and sampling to speed up
+epochs = 1000    # was 10000
+num_samples = 100 # number of random points from each data set per epoch
+constant_u = torch.tensor([2900.0/3000.0], dtype=torch.float32).to(device) # initial fix temperature of newly added block
+
+
+for epoch in range(epochs):
+    optimizer.zero_grad()
+
+    # Randomly sample from each dataset
+    sampled_wall_internal_data = random_sample(nnd_wall_internal_data, num_samples)
+    sampled_new_block_internal_data = random_sample(nnd_new_block_internal_data, num_samples)
+    # sampled_boundary_data = random_sample(boundary_data, num_samples)
+    sampled_boundary_data_left = random_sample(nnd_boundary_data_left, num_samples)
+    sampled_boundary_data_right = random_sample(nnd_boundary_data_right, num_samples)
+    sampled_boundary_data_shared = random_sample(nnd_boundary_data_shared, num_samples)
+    sampled_boundary_data_top_left = random_sample(nnd_boundary_data_top_left, num_samples)
+    sampled_boundary_data_top_right = random_sample(nnd_boundary_data_top_right, num_samples)
+    if consider_bottom_as_boundary:
+        sampled_boundary_data_bottom = random_sample(nnd_boundary_data_bottom, num_samples)
+
+    # Model predictions at interior (wall) points
+    u_wall_internal_data = model(sampled_wall_internal_data)
+    x = sampled_wall_internal_data[:, 0:1]
+    y = sampled_wall_internal_data[:, 1:2]
+    tvar = sampled_wall_internal_data[:, 2:3]
+
+    # Heat source term: For PDE dU/dt - Laplacian(U) = f, define f below
+    #   e.g., f = - (Gaussian heat source) - 1.5
+    #   The minus sign depends on PDE form; adapt as needed
+
+    f = heat_source_equation(x, y, tvar, 1.0, 0.5, 10.0, 0.0) - 1.5
+
+    # PDE residual for interior
+    residual_interior = equation(u_wall_internal_data, sampled_wall_internal_data, f)
+    loss_interior = torch.mean(residual_interior**2)
+    # 'New block' boundary condition: e.g., T(new block region) = 1.0
+    u_new_block_internal_data = model(sampled_new_block_internal_data)
+    loss_new_block = torch.mean((u_new_block_internal_data - constant_u)**2)
+
+    # External boundary condition: e.g., T = 0.0 on domain boundary
+    # If you want to enforce Dirichlet = 0, uncomment next line:
+    # loss_boundary = torch.mean((model(sampled_boundary_data) - 0.0)**2)
+
+    # Currently we set boundary condition as T = 0 as an example:
+    # u_boundary_data = model(sampled_boundary_data)
+    u_boundary_data_left = model(sampled_boundary_data_left)
+    u_boundary_data_right = model(sampled_boundary_data_right)
+    u_boundary_data_shared = model(sampled_boundary_data_shared)
+    u_boundary_data_top_left = model(sampled_boundary_data_top_left)
+    u_boundary_data_top_right = model(sampled_boundary_data_top_right)
+    if consider_bottom_as_boundary:
+        u_boundary_data_bottom = model(sampled_boundary_data_bottom)
+    loss_boundary_left = torch.mean(bc_left(u_boundary_data_left, sampled_boundary_data_left,
+                                            h = 0.02, u_amb = 298/3000,
+                                            sigma= 5.67*(10**(-11)), epsilon = 0.3,
+                                            k = 11.4, lc = 2.0, tc = 3000)**2)
+
+    loss_boundary_right = torch.mean(bc_left(u_boundary_data_right, sampled_boundary_data_right,
+                                             h = 0.02, u_amb = 298/3000,
+                                             sigma= 5.67*(10**(-11)), epsilon = 0.3,
+                                             k = 11.4, lc = 2.0, tc = 3000)**2)
+
+    loss_boundary_shared = torch.mean(bc_left(u_boundary_data_shared, sampled_boundary_data_shared,
+                                              h = 0.02, u_amb = 298/3000,
+                                              sigma= 5.67*(10**(-11)), epsilon = 0.3,
+                                              k = 11.4, lc = 2.0, tc = 3000)**2)
+
+    loss_boundary_top_left = torch.mean(bc_left(u_boundary_data_top_left, sampled_boundary_data_top_left,
+                                                h = 0.02, u_amb = 298/3000,
+                                                sigma= 5.67*(10**(-11)), epsilon = 0.3,
+                                                k = 11.4, lc = 2.0, tc = 3000)**2)
+
+    loss_boundary_top_right = torch.mean(bc_left(u_boundary_data_top_right, sampled_boundary_data_top_right,
+                                                 h = 0.02, u_amb = 298/3000,
+                                                 sigma= 5.67*(10**(-11)), epsilon = 0.3,
+                                                 k = 11.4, lc = 2.0, tc = 3000)**2)
+
+    if consider_bottom_as_boundary:
+        loss_boundary_bottom = torch.mean(bc_left(u_boundary_data_bottom, sampled_boundary_data_bottom,
+                                                  h = 0.02, u_amb = 298/3000,
+                                                  sigma= 5.67*(10**(-11)), epsilon = 0.3,
+                                                  k = 11.4, lc = 2.0, tc = 3000)**2)
+
+    # loss_boundary = torch.mean(u_boundary_data**2)  # "0" boundary condition
+
+    loss_boundary = loss_boundary_left + loss_boundary_right + \
+                    loss_boundary_shared + loss_boundary_top_left + \
+                    loss_boundary_top_right
+    if  consider_bottom_as_boundary:
+        loss_boundary = loss_boundary + loss_boundary_bottom
+
+    # Total loss
+    loss = loss_interior + loss_new_block + loss_boundary
+
+    # Backpropagation
+    loss.backward()
+    optimizer.step()
+
+    # Print progress
+    if epoch % 100 == 0:  # print every 100 epochs
+        print(f"Epoch {epoch}, Loss: {loss.item()}")

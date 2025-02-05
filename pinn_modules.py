@@ -96,7 +96,7 @@ def equation(u, X, f, k = 11.4, rho = 4.5*(10**(-9)), cp = 7.14*(10**8), tc = 0.
 
     # Example PDE: heat equation with source => dU/dt - Laplacian(U) - f = 0
     # Laplacian(U) = d2U/dx2 + d2U/dy2
-    return d_u_dt - (k/rho*cp)*(tc/(lc**2))(d2u_dx2 + d2u_dy2) - f
+    return d_u_dt - (k/rho*cp)*(tc/(lc**2))*(d2u_dx2 + d2u_dy2) - f
 
 
 
@@ -113,7 +113,7 @@ def bc_left(u, X, h = 0.02, u_amb = 298/3000,
 
     conv = (h*lc/k)*(u-u_amb)
 
-    rad = (sigma*epsilon*(tc**3)*lc/k)(u**4 - u_amb**4)
+    rad = (sigma*epsilon*(tc**3)*lc/k)*(u**4 - u_amb**4)
 
 
     return du_dx - conv - rad
