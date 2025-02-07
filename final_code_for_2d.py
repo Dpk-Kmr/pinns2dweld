@@ -4,50 +4,50 @@ import matplotlib.pyplot as plt
 import random
 
 
-def draw_rectangle_with_data_points(corner_points):
-    """
-    Draws a filled rectangle on a 2D plot using the provided corner points
-    (in cyclic order).
+# def draw_rectangle_with_data_points(corner_points):
+#     """
+#     Draws a filled rectangle on a 2D plot using the provided corner points
+#     (in cyclic order).
 
-    Parameters:
-    -----------
-    corner_points: list of lists (float)
-        A list of corner coordinates [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-        provided in a cyclic order.
+#     Parameters:
+#     -----------
+#     corner_points: list of lists (float)
+#         A list of corner coordinates [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+#         provided in a cyclic order.
 
-    Returns:
-    --------
-    None
-    """
-    x_coords = [point[0] for point in corner_points]
-    y_coords = [point[1] for point in corner_points]
-    plt.figure()
-    plt.fill(x_coords, y_coords, color='skyblue')
-    plt.xlim(0, 10)
-    plt.ylim(0, 10)
-    plt.title("Rectangle with Data Points")
-    plt.show()
+#     Returns:
+#     --------
+#     None
+#     """
+#     x_coords = [point[0] for point in corner_points]
+#     y_coords = [point[1] for point in corner_points]
+#     plt.figure()
+#     plt.fill(x_coords, y_coords, color='skyblue')
+#     plt.xlim(0, 10)
+#     plt.ylim(0, 10)
+#     plt.title("Rectangle with Data Points")
+#     plt.show()
 
 
-def generate_1d_array(size, min_val=0, max_val=10):
-    """
-    Generates a 1D NumPy array of uniformly distributed random numbers.
+# def generate_1d_array(size, min_val=0, max_val=10):
+#     """
+#     Generates a 1D NumPy array of uniformly distributed random numbers.
 
-    Parameters:
-    -----------
-    size: int
-        Number of random samples to generate.
-    min_val: float
-        Lower bound of the uniform distribution.
-    max_val: float
-        Upper bound of the uniform distribution.
+#     Parameters:
+#     -----------
+#     size: int
+#         Number of random samples to generate.
+#     min_val: float
+#         Lower bound of the uniform distribution.
+#     max_val: float
+#         Upper bound of the uniform distribution.
 
-    Returns:
-    --------
-    np.ndarray
-        1D array of random numbers.
-    """
-    return np.random.uniform(min_val, max_val, size)
+#     Returns:
+#     --------
+#     np.ndarray
+#         1D array of random numbers.
+#     """
+#     return np.random.uniform(min_val, max_val, size)
 
 
 def solid_blocks(x_corner, y_corner, direction, x_len, block_height, block_length, new_block):
@@ -490,3 +490,248 @@ def heat_source_equation(x, y, current_time, travel_speed, jump, x_max, x_min):
     modified_return_data[y > heat_source_origin_y] = 0
     # return_data[y>heat_source_origin_y] = 0
     return modified_return_data
+
+
+def generate_new_block_internal_data(block_corner_data, ctd_data, mode='random', dx=0.01, dy=0.01, density=100):
+    new_block_internal_data = []
+    for bcdi, ctdi in zip(block_corner_data, ctd_data):
+        new_block = [bcdi[2]]  # bcdi[2] is the newly created block corners
+        time_ = ctdi[2]
+        new_datai_new_block = generate_points(new_block, time_, mode=mode, dx=dx, dy=dy, density=density)
+        new_block_internal_data += new_datai_new_block
+    new_block_internal_data = np.array(new_block_internal_data)
+    return new_block_internal_data
+
+
+def generate_wall_internal_data(block_corner_data, ctd_data, total_mid_times = 10, t_mode = "uniform", mode = "random", dx=0.01, dy=0.01, density=50):
+    wall_internal_data = []
+    if t_mode == "uniform":
+        for bcdi, ctdip, ctdin in zip(block_corner_data[:-1], ctd_data[:-1], ctd_data[1:]):
+            for t_mid in torch.linspace(ctdip[2], ctdin[2], 10)[:-1]:
+                mid_time_data = generate_points(bcdi, t_mid, mode=mode, dx=dx, dy=dy, density=density)
+                wall_internal_data += mid_time_data
+    elif t_mode == "random":
+        for bcdi, ctdip, ctdin in zip(block_corner_data[:-1], ctd_data[:-1], ctd_data[1:]):
+            for _ in range(total_mid_times):
+                # Random time between ctdip[2] and ctdin[2]
+                t_mid = random.uniform(ctdip[2], ctdin[2])
+                mid_time_data = generate_points(bcdi, t_mid, mode=mode, dx=dx, dy=dy, density=density)
+                wall_internal_data += mid_time_data
+    else:
+        raise ValueError("Invalid mode. Use 'uniform' or 'random'.")
+    wall_internal_data = np.array(wall_internal_data)
+    return wall_internal_data
+
+
+def generate_boundary_data(block_corner_data, ctd_data, total_mid_times = 10,
+                           t_mode = "uniform", mode = "random", dx=0.01, dy=0.01,
+                           density=50, consider_bottom_as_boundary = False):
+    boundary_data = []
+    if t_mode == "uniform":
+        for bcdi, ctdip, ctdin in zip(block_corner_data[:-1], ctd_data[:-1], ctd_data[1:]):
+            for t_mid in torch.linspace(ctdip[2], ctdin[2], 10)[:-1]:
+                mid_time_data = generate_boundary_point_using_three_blocks(bcdi, t_mid, mode=mode,
+                                                                           dx=dx, dy=dy, density=density,
+                                                                           consider_bottom_as_boundary = consider_bottom_as_boundary)
+                boundary_data += mid_time_data
+    elif t_mode == "random":
+        for bcdi, ctdip, ctdin in zip(block_corner_data[:-1], ctd_data[:-1], ctd_data[1:]):
+            for _ in range(total_mid_times):
+                # Random time between ctdip[2] and ctdin[2]
+                t_mid = random.uniform(ctdip[2], ctdin[2])
+                mid_time_data = generate_boundary_point_using_three_blocks(bcdi, t_mid, mode=mode,
+                                                                           dx=dx, dy=dy, density=density,
+                                                                           consider_bottom_as_boundary = consider_bottom_as_boundary)
+                boundary_data += mid_time_data
+    else:
+        raise ValueError("Invalid mode. Use 'uniform' or 'random'.")
+    boundary_data = np.array(boundary_data)
+    return boundary_data
+
+
+
+
+def generate_all_individual_boundary_data(block_corner_data, ctd_data, total_mid_times = 10,
+                                          t_mode = "uniform", mode = "random", dx=0.01, dy=0.01,
+                                          density=50, consider_bottom_as_boundary = False):
+    boundary_data = {}
+    boundary_data["left"] = []
+    boundary_data["right"] = []
+    boundary_data["shared"] = []
+    boundary_data["top_left"] = []
+    boundary_data["top_right"] = []
+    if consider_bottom_as_boundary:
+        boundary_data["bottom"] = []
+    if t_mode == "uniform":
+        for bcdi, ctdip, ctdin in zip(block_corner_data[:-1], ctd_data[:-1], ctd_data[1:]):
+            for t_mid in torch.linspace(ctdip[2], ctdin[2], 10)[:-1]:
+                mid_time_data = generate_individual_boundary_data(bcdi, t_mid, mode=mode,
+                                                                  dx=dx, dy=dy, density=density,
+                                                                  consider_bottom_as_boundary = consider_bottom_as_boundary)
+
+                boundary_data["left"] += mid_time_data["left"]
+                boundary_data["right"] += mid_time_data["right"]
+                boundary_data["shared"] += mid_time_data["shared"]
+                boundary_data["top_left"] += mid_time_data["top_left"]
+                boundary_data["top_right"] += mid_time_data["top_right"]
+                if consider_bottom_as_boundary:
+                    boundary_data["bottom"] += mid_time_data["bottom"]
+    elif t_mode == "random":
+        for bcdi, ctdip, ctdin in zip(block_corner_data[:-1], ctd_data[:-1], ctd_data[1:]):
+            for _ in range(total_mid_times):
+                t_mid = random.uniform(ctdip[2], ctdin[2])
+                mid_time_data = generate_individual_boundary_data(bcdi, t_mid, mode=mode,
+                                                                  dx=dx, dy=dy, density=density,
+                                                                  consider_bottom_as_boundary = consider_bottom_as_boundary)
+
+                boundary_data["left"] += mid_time_data["left"]
+                boundary_data["right"] += mid_time_data["right"]
+                boundary_data["shared"] += mid_time_data["shared"]
+                boundary_data["top_left"] += mid_time_data["top_left"]
+                boundary_data["top_right"] += mid_time_data["top_right"]
+                if consider_bottom_as_boundary:
+                    boundary_data["bottom"] += mid_time_data["bottom"]
+
+    else:
+        raise ValueError("Invalid mode. Use 'uniform' or 'random'.")
+    boundary_data["left"] = np.array(boundary_data["left"])
+    boundary_data["right"] = np.array(boundary_data["right"])
+    boundary_data["shared"] = np.array(boundary_data["shared"])
+    boundary_data["top_left"] = np.array(boundary_data["top_left"])
+    boundary_data["top_right"] = np.array(boundary_data["top_right"])
+    if consider_bottom_as_boundary:
+        boundary_data["bottom"] = np.array(boundary_data["bottom"])
+    return boundary_data
+
+
+
+def random_sample(tensor_, num_samples):
+    """
+    Randomly samples 'num_samples' data points from 'tensor_'.
+    """
+    random_indices = random.sample(range(len(tensor_)), min(num_samples, len(tensor_)))
+    return tensor_[random_indices]
+
+if __name__ == "__main__":
+
+
+    x_range = [0.0, 15.0] # mm
+    y_range = [0.0, 4.0] # mm
+    t_range = [0.0, 6.0] # sec
+
+    # Time step for generating major changes (new block install)
+    time_gap = 0.1 #
+    t_data = np.arange(t_range[0], t_range[1], time_gap)
+
+    # Block geometry parameters
+    x_len = x_range[-1]  # total length of wall in mm
+    x_gap = 1.0          # mm (length of each new block)
+    y_gap = 1.0          # mm (height of each new block)
+    direction = 1        # start moving from left to right
+    y_level = 1.0        # mm (initial block top y)
+
+    # ctd_data will track the 'center' or 'joint' data of the new block
+    ctd_data = [[x_gap, y_gap, t_data[0], direction]]
+
+    # Create ctd_data for each time step
+    for ti in t_data[1:]:
+        if direction == 1:
+            x_value = ctd_data[-1][0] + 1.0
+        else:
+            x_value = ctd_data[-1][0] - 1.0
+
+        ctd_data.append([x_value, y_level, ti, direction])
+
+        # If we reached the boundary, flip direction and move up in y
+        if x_value == x_range[0] or x_value == x_range[1]:
+            direction = -direction
+            y_level = y_level + y_gap
+
+    # Generate corner data for each time step
+    block_corner_data = []
+    for x_corner, y_corner, ti, direction in ctd_data:
+        new_data = np.array(
+            solid_blocks(x_corner, y_corner, direction, x_len, y_gap, x_gap, True)
+        )
+        block_corner_data.append(new_data)
+    block_corner_data = np.array(block_corner_data)
+
+
+    new_block_internal_data = generate_new_block_internal_data(block_corner_data, ctd_data, mode='random', dx=0.01, dy=0.01, density=2)
+    total_mid_times_internal = 10
+    wall_internal_data = generate_wall_internal_data(block_corner_data, ctd_data, total_mid_times = total_mid_times_internal,
+                                                    t_mode = "random", mode = "random", dx=0.01, dy=0.01, density=2)
+
+
+    total_mid_times_boundary = 10
+    consider_bottom_as_boundary = False
+    boundary_data = generate_boundary_data(block_corner_data, ctd_data, total_mid_times = total_mid_times_boundary,
+                                        t_mode = "random", mode = "random", dx=0.01, dy=0.01,
+                                        density=2, consider_bottom_as_boundary = consider_bottom_as_boundary)
+
+
+
+    total_mid_times_boundary = 10
+    consider_bottom_as_boundary = False
+    indi_boundary_data = generate_all_individual_boundary_data(block_corner_data, ctd_data, total_mid_times = total_mid_times_boundary,
+                                                            t_mode = "random", mode = "random", dx=0.01, dy=0.01,
+                                                            density=2, consider_bottom_as_boundary = consider_bottom_as_boundary)
+
+
+    #############################################################################
+    # convert to non-dimensionalized form
+    phi_laser = 2 #mm
+    v_laser = 10 # mm/s
+    lc = phi_laser # mm
+    tc = phi_laser/ v_laser
+
+    nd_new_block_internal_data = new_block_internal_data/ np.array([lc, lc, tc])
+
+    nd_wall_internal_data = wall_internal_data/ np.array([lc, lc, tc])
+
+    nd_indi_boundary_data = {}
+    for i in indi_boundary_data:
+        nd_indi_boundary_data[i] = indi_boundary_data[i] / np.array([lc, lc, tc])
+
+
+    #############################################################################
+    # convert to ormalized form
+
+    ndx_max = 7.5
+    ndy_max = 2.0
+    ndt_max = 30
+    ndx_min = 0
+    ndy_min = 0
+    ndt_min = 0
+
+
+    nnd_new_block_internal_data = 2*(nd_new_block_internal_data - np.array([ndx_max, ndy_max, ndt_max])/ \
+                                np.array([ndx_max-ndx_min, ndy_max-ndy_min, ndt_max-ndt_min])) - 1.0
+
+    nnd_wall_internal_data = 2*(nd_wall_internal_data - np.array([ndx_max, ndy_max, ndt_max])/ \
+                                np.array([ndx_max-ndx_min, ndy_max-ndy_min, ndt_max-ndt_min])) - 1.0
+
+    nnd_indi_boundary_data = {}
+    for i in nd_indi_boundary_data:
+        nnd_indi_boundary_data[i] = 2*(nd_indi_boundary_data[i] - np.array([ndx_max, ndy_max, ndt_max])/ \
+                                np.array([ndx_max-ndx_min, ndy_max-ndy_min, ndt_max-ndt_min])) - 1.0
+
+
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Using device:", device)
+
+    nnd_new_block_internal_data = torch.tensor(nnd_new_block_internal_data, dtype=torch.float32).to(device)
+    nnd_wall_internal_data = torch.tensor(nnd_wall_internal_data, dtype=torch.float32).to(device)
+    # boundary_data = torch.tensor(boundary_data, dtype=torch.float32).to(device)
+
+    nnd_boundary_data_left = torch.tensor(nnd_indi_boundary_data["left"], dtype=torch.float32).to(device)
+    nnd_boundary_data_right = torch.tensor(nnd_indi_boundary_data["right"], dtype=torch.float32).to(device)
+    nnd_boundary_data_shared = torch.tensor(nnd_indi_boundary_data["shared"], dtype=torch.float32).to(device)
+    nnd_boundary_data_top_left = torch.tensor(nnd_indi_boundary_data["top_left"], dtype=torch.float32).to(device)
+    nnd_boundary_data_top_right = torch.tensor(nnd_indi_boundary_data["top_right"], dtype=torch.float32).to(device)
+    if consider_bottom_as_boundary:
+        nnd_boundary_data_bottom = torch.tensor(nnd_indi_boundary_data["bottom"], dtype=torch.float32).to(device)
+
+
+    print(nnd_wall_internal_data)
