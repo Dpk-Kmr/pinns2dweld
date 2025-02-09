@@ -464,6 +464,7 @@ class BlockSimulation:
         print("Using device:", device)
 
         new_block_internal_data = self.generate_new_block_internal_data()
+        print(new_block_internal_data)
         wall_internal_data = self.generate_wall_internal_data()
         indi_boundary_data = self.generate_all_individual_boundary_data()
 
@@ -543,13 +544,14 @@ if __name__ == "__main__":
     # Process the data (this returns a dictionary with torch tensors).
     data = sim.process_data()
 
-    # For example, print the shapes of the generated data:
-    print("New Block Internal Data:", data["new_block_internal"].shape)
-    print("Wall Internal Data:", data["wall_internal"].shape)
-    print("Boundary Left Data:", data["boundary_left"].shape)
-    print("Boundary Right Data:", data["boundary_right"].shape)
-    print("Boundary Shared Data:", data["boundary_shared"].shape)
-    print("Boundary Top Left Data:", data["boundary_top_left"].shape)
-    print("Boundary Top Right Data:", data["boundary_top_right"].shape)
-    if consider_bottom_as_boundary:
-        print("Boundary Bottom Data:", data["boundary_bottom"].shape)
+    # # For example, print the shapes of the generated data:
+    # print("New Block Internal Data:", data["new_block_internal"].shape)
+    # print("Wall Internal Data:", data["wall_internal"].shape)
+    # print("Boundary Left Data:", data["boundary_left"].shape)
+    # print("Boundary Right Data:", data["boundary_right"].shape)
+    # print("Boundary Shared Data:", data["boundary_shared"].shape)
+    # print("Boundary Top Left Data:", data["boundary_top_left"].shape)
+    # print("Boundary Top Right Data:", data["boundary_top_right"].shape)
+    # if consider_bottom_as_boundary:
+    #     print("Boundary Bottom Data:", data["boundary_bottom"].shape)
+    # print(data["new_block_internal"])
