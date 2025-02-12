@@ -49,7 +49,6 @@ def get_pointer_cords(
     if if_continuous:
         return [x_dis, y_dis], current_direction, new_block
     elif if_discrete:
-        print(x_dis, y_dis)
         x_dis = (x_dis//block_dx)*block_dx + block_dx/2 
         y_dis = (y_dis//block_dy)*block_dy
         return [x_dis, y_dis], current_direction, new_block
@@ -145,9 +144,12 @@ def gen_data_in_line(x_range, y_range, mode="random", density=100):
     if area != 0.0:
         print("expected a line, but got rectangle")
         return np.empty((0, 2))
+    elif dy == 0.0 and dx == 0.0:
+        print("expected a line, but got a point")
+        return np.empty((0, 2))
     else:
         area = max(dx, dy)
-        data_gen_line_rectangle(mode, density, dx, dy, xmin, xmax, ymin, ymax)
+        return data_gen_line_rectangle(mode, density, dx, dy, xmin, xmax, ymin, ymax)
 
 def get_t_wall_data(
         time, x_speed, y_speed, 
@@ -229,49 +231,147 @@ def get_t_boundary_data(
         block_dy = block_dy,
         start_t = start_t
         )
-    boundary_data = np.empty((0, 2))
+    
     left_y = mid_xy[1] if current_direction == 0 else mid_xy[1] - block_dy
     right_y = mid_xy[1] if current_direction == 1 else mid_xy[1] - block_dy
-    ##################################################################################################
-    ##################################################################################################
-    ##################################################################################################
     left_boundary_data = gen_data_in_line(
         [0, 0], 
-        [0, mid_xy[1]], 
+        [0, left_y], 
         mode=mode, 
         density=density)
-        np.vstack((wall_data, gen_data_in_rectangle([0, x_max], 
-                                                                [0, mid_xy[1] - block_dy], 
-                                                                mode=mode, 
-                                                                density=lower_density)))
+    right_boundary_data = gen_data_in_line(
+        [0, 0], 
+        [0, right_y], 
+        mode=mode, 
+        density=density)
     if current_direction == 0:
-        wall_data = np.vstack((wall_data, gen_data_in_rectangle([0, mid_xy[0] + block_dx], 
-                                                                [mid_xy[1] - block_dy, mid_xy[1]], 
-                                                                mode=mode, 
-                                                                density=upper_density)))
-    if current_direction == 1:
-        wall_data = np.vstack((wall_data, gen_data_in_rectangle([mid_xy[0] - block_dx, x_max], 
-                                                                [mid_xy[1] - block_dy, mid_xy[1]], 
-                                                                mode=mode, 
-                                                                density=upper_density)))
-    if increase_latest_block_data:
-        wall_data = np.vstack((wall_data, gen_data_in_rectangle([mid_xy[0] - block_dx, mid_xy[0] + block_dx], 
-                                                                [mid_xy[1] - block_dy, mid_xy[1]], 
-                                                                mode=mode, 
-                                                                density=new_density)))
-
-    time_col = np.full((wall_data.shape[0], 1), time)
-    return np.hstack((time_col, wall_data))
-
-
+        top_left_boundary_data = gen_data_in_line(
+            [0, mid_xy[0] + block_dx/2], 
+            [left_y, left_y], 
+            mode=mode, 
+            density=density)
+        top_right_boundary_data = gen_data_in_line(
+            [mid_xy[0] + block_dx/2, x_max], 
+            [left_y, left_y], 
+            mode=mode, 
+            density=density)
+        mid_boundary_data = gen_data_in_line(
+            [mid_xy[0] + block_dx/2, mid_xy[0] + block_dx/2], 
+            [mid_xy[1] - block_dy, mid_xy[1]], 
+            mode=mode, 
+            density=density)
+    else:
+        top_left_boundary_data = gen_data_in_line(
+            [0, mid_xy[0] - block_dx/2], 
+            [left_y, left_y], 
+            mode=mode, 
+            density=density)
+        top_right_boundary_data = gen_data_in_line(
+            [mid_xy[0] - block_dx/2, x_max], 
+            [left_y, left_y], 
+            mode=mode, 
+            density=density)
+        mid_boundary_data = gen_data_in_line(
+            [mid_xy[0] - block_dx/2, mid_xy[0] - block_dx/2], 
+            [mid_xy[1] - block_dy, mid_xy[1]], 
+            mode=mode, 
+            density=density)
+    if bottom_data:
+        if mid_xy[1] != block_dy:
+            bottom_boundary_data = gen_data_in_line(
+                [0, x_max], 
+                [0, 0], 
+                mode=mode, 
+                density=density)
+        else:
+            bottom_boundary_data = gen_data_in_line(
+                [0, mid_xy[0]+block_dx/2], 
+                [0, 0], 
+                mode=mode, 
+                density=density)
+        bottom_boundary_data = np.hstack((np.full((bottom_boundary_data.shape[0], 1), time), bottom_boundary_data))
+    else:
+        bottom_boundary_data = np.empty((0, 3))
+    left_boundary_data = np.hstack((np.full((left_boundary_data.shape[0], 1), time), left_boundary_data))
+    right_boundary_data = np.hstack((np.full((right_boundary_data.shape[0], 1), time), right_boundary_data))
+    mid_boundary_data = np.hstack((np.full((mid_boundary_data.shape[0], 1), time), mid_boundary_data))
+    top_left_boundary_data = np.hstack((np.full((top_left_boundary_data.shape[0], 1), time), top_left_boundary_data))
+    top_right_boundary_data = np.hstack((np.full((top_right_boundary_data.shape[0], 1), time), top_right_boundary_data))
+    left_boundary_data = np.hstack((np.full((left_boundary_data.shape[0], 1), time), left_boundary_data))
     
-    
-    
-print(get_t_wall_data(0, 1, 1))
+    return (left_boundary_data,
+            right_boundary_data,
+            mid_boundary_data,
+            top_left_boundary_data, 
+            top_right_boundary_data, 
+            bottom_boundary_data)
 
 
 
-# _ = gen_data_in_rectangle([0, 1], [0, 1], mode="uniform", density=100)
-# plt.figure()
-# plt.scatter(_[:,0], _[:,1])
-# plt.show()
+
+# Define figure dimensions
+x_max, y_max = 10, 10
+
+# Prepare the figure and axis
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.set_xlim(0, x_max)
+ax.set_ylim(0, y_max)
+ax.set_xlabel("X Coordinate")
+ax.set_ylabel("Y Coordinate")
+ax.set_title("Welding Wall")
+ax.grid(False)
+
+# Initialize scatter plots
+scatter_wall = ax.scatter([], [], s=6, c="black")
+scatter_b0 = ax.scatter([], [], s=6, c="pink")
+scatter_b1 = ax.scatter([], [], s=6, c="red")
+scatter_b2 = ax.scatter([], [], s=6, c="blue")
+scatter_b3 = ax.scatter([], [], s=6, c="green")
+scatter_b4 = ax.scatter([], [], s=6, c="yellow")
+scatter_b5 = ax.scatter([], [], s=6, c="orange")
+
+
+def get_data(frame):
+    t = frame
+    all_boundary_data = get_t_boundary_data(t, 1, 1)
+    wall_data = get_t_wall_data(t, 1, 1)
+    return (
+        wall_data[:,1:],
+        all_boundary_data[0][:,1:],
+        all_boundary_data[1][:,1:],
+        all_boundary_data[2][:,1:],
+        all_boundary_data[3][:,1:],
+        all_boundary_data[4][:,1:],
+        all_boundary_data[5][:,1:]
+    )
+
+def init():
+    scatter_wall.set_offsets([], [])
+    scatter_b0.set_offsets([], [])
+    scatter_b1.set_offsets([], [])
+    scatter_b2.set_offsets([], [])
+    scatter_b3.set_offsets([], [])
+    scatter_b4.set_offsets([], [])
+    scatter_b5.set_offsets([], [])
+    return scatter_wall, scatter_b0, scatter_b1, scatter_b2, scatter_b3, scatter_b4, scatter_b5
+
+def update(frame):
+    data = get_data(frame)
+
+    # Update scatter plots
+    scatter_wall.set_offsets(data[0][:,0], data[0][:,1])
+    scatter_b0.set_offsets(data[1][:,0], data[1][:,1])
+    scatter_b1.set_offsets(data[2][:,0], data[2][:,1])
+    scatter_b2.set_offsets(data[3][:,0], data[3][:,1])
+    scatter_b3.set_offsets(data[4][:,0], data[4][:,1])
+    scatter_b4.set_offsets(data[5][:,0], data[5][:,1])
+    scatter_b5.set_offsets(data[6][:,0], data[6][:,1])
+
+    return scatter_wall, scatter_b0, scatter_b1, scatter_b2, scatter_b3, scatter_b4, scatter_b5
+
+# Create the animation
+anim = animation.FuncAnimation(fig, update, frames=25, init_func=init,
+                               interval=1000, blit=True, repeat=False)
+
+plt.show()
+
