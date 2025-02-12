@@ -1,3 +1,7 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.animation as animation
+
 def get_pointer_cords(
         time, x_speed, y_speed, 
         movement_type = "bidirectional", 
@@ -53,53 +57,221 @@ def get_pointer_cords(
         raise ValueError("Both if_continuous and if_discrete can not be False")
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-
-# Generate Data from an External Function
-def get_data(frame):
-    """Returns x and y data for each frame."""
-    x = np.linspace(0, 10, 100)
-    if frame % 2 == 0:
-        y = np.sin(x + frame / 10)  # Line plot data
-        plot_type = "line"
+def data_gen_line_rectangle(mode, density, dx, dy, xmin, xmax, ymin, ymax):
+    if mode == "random":
+        # Total points is density times area
+        total_points = int(density * max(dx, dy))
+        xs = np.random.uniform(xmin, xmax, total_points)
+        ys = np.random.uniform(ymin, ymax, total_points)
+        points = np.column_stack((xs, ys))
+    elif mode == "uniform":
+        # To obtain roughly the desired density, we set grid spacing h ~ 1/sqrt(density)
+        spacing = 1 / np.sqrt(density)
+        # Compute number of points along each axis. Adding 1 ensures the boundaries are included.
+        n_x = int(np.floor(dx / spacing)) + 1
+        n_y = int(np.floor(dy / spacing)) + 1
+        xs = np.linspace(xmin, xmax, n_x)
+        ys = np.linspace(ymin, ymax, n_y)
+        xv, yv = np.meshgrid(xs, ys)
+        points = np.column_stack((xv.ravel(), yv.ravel()))
     else:
-        y = np.random.rand(len(x))  # Scatter plot data
-        plot_type = "scatter"
-    return x, y, plot_type
+        raise ValueError("Mode must be either 'random' or 'uniform'.")
 
-# Create Figure and Axis
-fig, ax = plt.subplots()
-ax.set_xlim(0, 10)
-ax.set_ylim(-1.5, 1.5)
+    return points
 
-# Initialize line and scatter plot
-line, = ax.plot([], [], lw=2, label="Sine Wave")  
-scatter = ax.scatter([], [], color='red', label="Random Points")
-
-# Initialization Function
-def init():
-    line.set_data([], [])
-    scatter.set_offsets(np.empty((0, 2)))
-    return line, scatter
-
-# Update Function
-def update(frame):
-    x, y, plot_type = get_data(frame)
-
-    if plot_type == "line":
-        line.set_data(x, y)
-        scatter.set_offsets(np.empty((0, 2)))
-    else:
-        scatter.set_offsets(np.c_[x, y])  # Set scatter points
-        line.set_data([], [])  # Hide line
+def gen_data_in_rectangle(x_range, y_range, mode="random", density=100):
+    """
+    Generate data points within a given rectangle.
     
-    return line, scatter
+    Parameters
+    ----------
+    x_range : tuple of floats
+        (xmin, xmax) boundaries of the rectangle.
+    y_range : tuple of floats
+        (ymin, ymax) boundaries of the rectangle.
+    mode : str, optional
+        "random" or "uniform". 
+        - "random": points are randomly distributed over the rectangle.
+        - "uniform": points are arranged on a uniform grid.
+    density : float, optional
+        Number of data points per unit area.
+        
+    Returns
+    -------
+    points : numpy.ndarray
+        Array of shape (N, 2) containing the generated (x, y) data points.
+    """
+    xmin, xmax = min(x_range), max(x_range)
+    ymin, ymax = min(y_range), max(y_range)
 
-# Create Animation
-ani = animation.FuncAnimation(fig, update, frames=100, init_func=init, blit=True)
+    dx = xmax - xmin
+    dy = ymax - ymin
+    area = dx * dy
+    if area == 0.0:
+        print("expected a rectangle, but got line")
+        return np.empty((0, 2))
+    else:
+        return data_gen_line_rectangle(mode, density, dx, dy, xmin, xmax, ymin, ymax)
+    
 
-# Show Animation
-plt.legend()
-plt.show()
+def gen_data_in_line(x_range, y_range, mode="random", density=100):
+    """
+    Generate data points within a given rectangle.
+    
+    Parameters
+    ----------
+    x_range : tuple of floats
+        (xmin, xmax) boundaries of the rectangle.
+    y_range : tuple of floats
+        (ymin, ymax) boundaries of the rectangle.
+    mode : str, optional
+        "random" or "uniform". 
+        - "random": points are randomly distributed over the rectangle.
+        - "uniform": points are arranged on a uniform grid.
+    density : float, optional
+        Number of data points per unit area.
+        
+    Returns
+    -------
+    points : numpy.ndarray
+        Array of shape (N, 2) containing the generated (x, y) data points.
+    """
+    xmin, xmax = min(x_range), max(x_range)
+    ymin, ymax = min(y_range), max(y_range)
+
+    dx = xmax - xmin
+    dy = ymax - ymin
+    area = dx * dy
+    if area != 0.0:
+        print("expected a line, but got rectangle")
+        return np.empty((0, 2))
+    else:
+        area = max(dx, dy)
+        data_gen_line_rectangle(mode, density, dx, dy, xmin, xmax, ymin, ymax)
+
+def get_t_wall_data(
+        time, x_speed, y_speed, 
+        movement_type = "bidirectional", 
+        if_continuous = False, 
+        if_discrete = True, 
+        x_max = 10, 
+        y_max = 10, 
+        block_dx = 0.5, 
+        block_dy = 0.5,
+        start_t = 0.0, 
+        mode = "random", 
+        lower_density = 100, 
+        upper_density = 100,
+        new_density = 100,
+        increase_latest_block_data = False,
+):
+    mid_xy, current_direction, new_block = get_pointer_cords(
+        time, x_speed, y_speed, 
+        movement_type = movement_type, 
+        if_continuous = if_continuous, 
+        if_discrete = if_discrete, 
+        x_max = x_max, 
+        y_max = y_max, 
+        block_dx = block_dx, 
+        block_dy = block_dy,
+        start_t = start_t
+        )
+    wall_data = np.empty((0, 2))
+    # get data in lower reactangle
+    if  mid_xy[1] - block_dy != 0:
+        wall_data = np.vstack((wall_data, gen_data_in_rectangle([0, x_max], 
+                                                                [0, mid_xy[1] - block_dy], 
+                                                                mode=mode, 
+                                                                density=lower_density)))
+    # get data if moving forward
+    if current_direction == 0:
+        wall_data = np.vstack((wall_data, gen_data_in_rectangle([0, mid_xy[0] + block_dx], 
+                                                                [mid_xy[1] - block_dy, mid_xy[1]], 
+                                                                mode=mode, 
+                                                                density=upper_density)))
+    # get data if moving backward
+    if current_direction == 1:
+        wall_data = np.vstack((wall_data, gen_data_in_rectangle([mid_xy[0] - block_dx, x_max], 
+                                                                [mid_xy[1] - block_dy, mid_xy[1]], 
+                                                                mode=mode, 
+                                                                density=upper_density)))
+    if increase_latest_block_data:
+        wall_data = np.vstack((wall_data, gen_data_in_rectangle([mid_xy[0] - block_dx, mid_xy[0] + block_dx], 
+                                                                [mid_xy[1] - block_dy, mid_xy[1]], 
+                                                                mode=mode, 
+                                                                density=new_density)))
+
+    time_col = np.full((wall_data.shape[0], 1), time)
+    return np.hstack((time_col, wall_data))
+
+def get_t_boundary_data(
+        time, x_speed, y_speed, 
+        movement_type = "bidirectional", 
+        if_continuous = False, 
+        if_discrete = True, 
+        x_max = 10, 
+        y_max = 10, 
+        block_dx = 0.5, 
+        block_dy = 0.5,
+        start_t = 0.0, 
+        mode = "random", 
+        density = 1000, 
+        bottom_data = True,
+):
+    mid_xy, current_direction, new_block = get_pointer_cords(
+        time, x_speed, y_speed, 
+        movement_type = movement_type, 
+        if_continuous = if_continuous, 
+        if_discrete = if_discrete, 
+        x_max = x_max, 
+        y_max = y_max, 
+        block_dx = block_dx, 
+        block_dy = block_dy,
+        start_t = start_t
+        )
+    boundary_data = np.empty((0, 2))
+    left_y = mid_xy[1] if current_direction == 0 else mid_xy[1] - block_dy
+    right_y = mid_xy[1] if current_direction == 1 else mid_xy[1] - block_dy
+    ##################################################################################################
+    ##################################################################################################
+    ##################################################################################################
+    left_boundary_data = gen_data_in_line(
+        [0, 0], 
+        [0, mid_xy[1]], 
+        mode=mode, 
+        density=density)
+        np.vstack((wall_data, gen_data_in_rectangle([0, x_max], 
+                                                                [0, mid_xy[1] - block_dy], 
+                                                                mode=mode, 
+                                                                density=lower_density)))
+    if current_direction == 0:
+        wall_data = np.vstack((wall_data, gen_data_in_rectangle([0, mid_xy[0] + block_dx], 
+                                                                [mid_xy[1] - block_dy, mid_xy[1]], 
+                                                                mode=mode, 
+                                                                density=upper_density)))
+    if current_direction == 1:
+        wall_data = np.vstack((wall_data, gen_data_in_rectangle([mid_xy[0] - block_dx, x_max], 
+                                                                [mid_xy[1] - block_dy, mid_xy[1]], 
+                                                                mode=mode, 
+                                                                density=upper_density)))
+    if increase_latest_block_data:
+        wall_data = np.vstack((wall_data, gen_data_in_rectangle([mid_xy[0] - block_dx, mid_xy[0] + block_dx], 
+                                                                [mid_xy[1] - block_dy, mid_xy[1]], 
+                                                                mode=mode, 
+                                                                density=new_density)))
+
+    time_col = np.full((wall_data.shape[0], 1), time)
+    return np.hstack((time_col, wall_data))
+
+
+    
+    
+    
+print(get_t_wall_data(0, 1, 1))
+
+
+
+# _ = gen_data_in_rectangle([0, 1], [0, 1], mode="uniform", density=100)
+# plt.figure()
+# plt.scatter(_[:,0], _[:,1])
+# plt.show()

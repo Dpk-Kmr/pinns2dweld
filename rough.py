@@ -1,1 +1,2 @@
-print(2*14/30 -1)
+import numpy as np
+print(np.linspace(10, 10, 30))
