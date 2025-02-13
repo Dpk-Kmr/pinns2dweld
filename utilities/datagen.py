@@ -562,64 +562,66 @@ def get_boundary_data(
         
     
     
-gnbd = get_newblock_data(
-        10, 1, 1, 
-        movement_type = "bidirectional", 
-        if_continuous = False, 
-        if_discrete = True, 
-        x_max = 10, 
-        y_max = 10, 
-        block_dx = 0.5, 
-        block_dy = 0.5,
-        start_t = 0.0, 
-        mode = "random", 
-        density = 500
-)
+
+if __name__=="__main__":
+    gnbd = get_newblock_data(
+            10, 1, 1, 
+            movement_type = "bidirectional", 
+            if_continuous = False, 
+            if_discrete = True, 
+            x_max = 10, 
+            y_max = 10, 
+            block_dx = 0.5, 
+            block_dy = 0.5,
+            start_t = 0.0, 
+            mode = "random", 
+            density = 500
+    )
 
 
-gwd = get_wall_data(
-        10, 1, 1, 
-        movement_type = "bidirectional", 
-        if_continuous = False, 
-        if_discrete = True, 
-        x_max = 10, 
-        y_max = 10, 
-        block_dx = 0.5, 
-        block_dy = 0.5,
-        start_t = 0.0, 
-        mode = "random", 
-        wall_density = 10, 
-        new_density = 100,
-        boundary_density = 50,
-        increase_latest_block_data = True,
-        increased_boundary_data = True,
-        boundary_width = None, 
-        top_boundary_layers = 2,
-        t_grid = "random",
-        t_density = 10     
-)
-    
+    gwd = get_wall_data(
+            10, 1, 1, 
+            movement_type = "bidirectional", 
+            if_continuous = False, 
+            if_discrete = True, 
+            x_max = 10, 
+            y_max = 10, 
+            block_dx = 0.5, 
+            block_dy = 0.5,
+            start_t = 0.0, 
+            mode = "random", 
+            wall_density = 10, 
+            new_density = 100,
+            boundary_density = 50,
+            increase_latest_block_data = True,
+            increased_boundary_data = True,
+            boundary_width = None, 
+            top_boundary_layers = 2,
+            t_grid = "random",
+            t_density = 10     
+    )
+        
 
-gbd = get_boundary_data(
-        10, 1, 1, 
-        movement_type = "bidirectional", 
-        if_continuous = False, 
-        if_discrete = True, 
-        x_max = 10, 
-        y_max = 10, 
-        block_dx = 0.5, 
-        block_dy = 0.5,
-        start_t = 0.0, 
-        mode = "random", 
-        density = 50, 
-        bottom_data = True,
-        groups = [[0, 1, 2], [3, 4], [5,]], 
-        t_grid = "random",
-        t_density = 10     
-)
-print(gnbd.shape)
-print(gwd.shape)
-print([gbdi.shape for gbdi in gbd])
+    gbd = get_boundary_data(
+            10, 1, 1, 
+            movement_type = "bidirectional", 
+            if_continuous = False, 
+            if_discrete = True, 
+            x_max = 10, 
+            y_max = 10, 
+            block_dx = 0.5, 
+            block_dy = 0.5,
+            start_t = 0.0, 
+            mode = "random", 
+            density = 50, 
+            bottom_data = True,
+            groups = [[0, 1, 2], [3, 4], [5,]], 
+            t_grid = "random",
+            t_density = 10     
+    )
+    print(gnbd.shape)
+    print(gwd.shape)
+    print([gbdi.shape for gbdi in gbd])
 
 
 
