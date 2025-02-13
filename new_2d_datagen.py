@@ -613,7 +613,7 @@ gbd = get_boundary_data(
         mode = "random", 
         density = 50, 
         bottom_data = True,
-        groups = [[0, 1, 2, 3, 4], [5,]], 
+        groups = [[0, 1, 2], [3, 4], [5,]], 
         t_grid = "random",
         t_density = 10     
 )
