@@ -1,87 +1,7 @@
 from datagen import *
 import torch
 
-def gen_2ddata(
-        tot_time, x_speed, y_speed, 
-        movement_type = "bidirectional", 
-        if_continuous = False, 
-        if_discrete = True, 
-        x_max = 6, 
-        y_max = 6, 
-        block_dx = 0.3, 
-        block_dy = 0.3,
-        start_t = 0.0, 
-        mode = "random", 
-        ic_density = 500,
-        wall_density = 10, 
-        new_density = 100,
-        boundary_density = 50,
-        bc_density = 50,
-        increase_latest_block_data = True,
-        increased_boundary_data = True,
-        boundary_width = None, 
-        top_boundary_layers = 2,
-        t_grid = "random",
-        t_density = 10, 
-        bottom_data = True,
-        bc_groups = [[0, 1, 2], [3, 4], [5,]]      
-):
-    gnbd = get_newblock_data(
-            tot_time, x_speed, y_speed, 
-            movement_type = movement_type, 
-            if_continuous = if_continuous, 
-            if_discrete = if_discrete, 
-            x_max = x_max, 
-            y_max = y_max, 
-            block_dx = block_dx, 
-            block_dy = block_dy,
-            start_t = start_t, 
-            mode = mode, 
-            density = ic_density
-    )
 
-
-    gwd = get_wall_data(
-            tot_time, x_speed, y_speed, 
-            movement_type = movement_type, 
-            if_continuous = if_continuous, 
-            if_discrete = if_discrete, 
-            x_max = x_max, 
-            y_max = y_max, 
-            block_dx = block_dx, 
-            block_dy = block_dy,
-            start_t = start_t, 
-            mode = mode, 
-            wall_density = wall_density, 
-            new_density = new_density,
-            boundary_density = boundary_density,
-            increase_latest_block_data = increase_latest_block_data,
-            increased_boundary_data = increased_boundary_data,
-            boundary_width = boundary_width, 
-            top_boundary_layers = top_boundary_layers,
-            t_grid = t_grid,
-            t_density = t_density     
-    )
-        
-
-    gbd = get_boundary_data(
-            tot_time, x_speed, y_speed, 
-            movement_type = movement_type, 
-            if_continuous = if_continuous, 
-            if_discrete = if_discrete, 
-            x_max = x_max, 
-            y_max = y_max, 
-            block_dx = block_dx, 
-            block_dy = block_dy,
-            start_t = start_t, 
-            mode = mode, 
-            density = bc_density, 
-            bottom_data = bottom_data,
-            groups = bc_groups, 
-            t_grid = t_grid,
-            t_density = t_density     
-    )
-    return gnbd, gwd, gbd
 
 
 def main_ode(T, X, Q, ps):
@@ -98,5 +18,113 @@ def get_2dQ(X, QX, ps):
     exp_factor = -3*(ps["lc"]**2)*(torch.sum(bracket_term, dim = 1).reshape(-1, 1))
     return multiplying_factor*torch.exp(exp_factor)
 
-def vbc_eq(T, X, ps):
-    
+def bc_eq(T, X, nX, ps, if_bottom = False):
+    dT_dX = torch.autograd.grad(T, X, grad_outputs=torch.ones_like(T), create_graph=True)[0][1:]
+    if not if_bottom:
+        return torch.sum(-ps["k"]*(dT_dX*nX), dim = 1).reshape(-1, 1)\
+              - ps["h"]*ps["lc"]*(T - ps["T_amb"])\
+                  - ps["sigma"]*ps["epsilon"]*(ps["Tc"]**3)*ps["lc"]*(T**4 - ps["T_amb"]**4)
+    if if_bottom:
+        return torch.sum(-ps["k"]*(dT_dX*nX), dim = 1).reshape(-1, 1)\
+              - ps["h_force"]*ps["lc"]*(T - ps["T_amb"])\
+                  
+def ic_eq(T, ps):
+    return T - ps["T_ref"]/ps["Tc"]
+
+
+if __name__ == "__main__":
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    import numpy as np
+
+    # Define the neural network model
+    class SimpleNN(nn.Module):
+        def __init__(self):
+            super(SimpleNN, self).__init__()
+            self.fc1 = nn.Linear(3, 64)  # First hidden layer (input: 3 neurons)
+            self.fc2 = nn.Linear(64, 64)  # Second hidden layer
+            self.fc3 = nn.Linear(64, 1)   # Output layer (1 neuron)
+
+        def forward(self, x):
+            x = torch.tanh(self.fc1(x))  # Tanh activation
+            x = torch.tanh(self.fc2(x))  # Tanh activation
+            x = self.fc3(x)  # No activation in the output layer
+            return x
+
+    # Generate some synthetic training data (for example)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    ps = {}
+    ps["k"] = 1.14e1
+    ps["rho"] = 4.5e-9
+    ps["cp"] = 7.14e8
+    ps["tc"] = 
+    ps["lc"]
+    ps["eta"]
+    ps["p"]
+    ps["Tc"]
+    ps["a"]
+    ps["b"]
+    ps["h"]
+    ps["T_amb"]
+    ps["sigma"]
+    ps["epsilon"]
+    ps["h_force"]
+    ps["T_ref"]
+
+    gnbd, gwd, gbd = gen_2ddata(10, 2/3, 2/3) 
+
+    gnbd, gwd, gbd = nd_data(gnbd, gwd, gbd, ps, ti = [0,], xs = [1, 2, 3, 4])
+
+    gnbd, gwd, gbd = nnd_data(gnbd, gwd, gbd, ti = [0,], xs = [1, 2], apply_inds = [3, 4])
+
+
+    # Convert to PyTorch tensors
+    gnbd = torch.tensor(gnbd, dtype=torch.float32)
+    gwd = torch.tensor(gwd, dtype=torch.float32)
+    for i in range(len(gbd)):
+        gbd[i] = torch.tensor(gbd[i], dtype=torch.float32)
+
+    # Define model, loss function, and optimizer
+    model = SimpleNN()
+    criterion = nn.MSELoss()  # Mean Squared Error loss (for regression)
+    optimizer = optim.Adam(model.parameters(), lr=0.01)  # Adam optimizer
+
+    # Training loop
+    num_epochs = 1000
+    for epoch in range(num_epochs):
+        optimizer.zero_grad()
+        T_gnbd = model(gnbd[:,:3])
+        T_gwd = model(gwd[:,:3])
+        T_gbd = []
+        for i in range(len(gbd)):
+            T_gbd[i] = model(gbd[i][:,:3])
+        
+        Q = get_2dQ(gwd[:,:3], gwd[:,3:5], ps)**2
+        ode_loss = torch.mean(main_ode(T_gwd, gwd[:,:3], Q, ps))
+        ic_loss = torch.mean(ic_eq(T_gnbd, ps))
+        bc1_loss = bc_eq(T_gbd[0], gbd[0][:,:3], gbd[0][:,5:7], ps, if_bottom = False)
+        bc2_loss = bc_eq(T_gbd[1], gbd[1][:,:3], gbd[1][:,5:7], ps, if_bottom = True)
+        final_bc_loss = torch.mean(torch.vstack((bc1_loss, bc2_loss)))
+        print(ode_loss, ic_loss, final_bc_loss)
+
+
+
+        loss = criterion(outputs, y_train)  # Compute loss
+        loss.backward()  # Backpropagation
+        optimizer.step()  # Update weights
+
+        if epoch % 100 == 0:
+            print(f"Epoch [{epoch}/{num_epochs}], Loss: {loss.item():.8f}")
+
+    # Test on a new sample
+    sample_input = torch.tensor([[0.2, 0.4, 0.6]], dtype=torch.float32)
+    prediction = model(sample_input)
+    print("\nSample Input:", sample_input.numpy())
+    print("Model Prediction:", prediction.item())
+
+
+
+
+

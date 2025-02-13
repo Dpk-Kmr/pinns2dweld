@@ -41,8 +41,8 @@ def get_pointer_cords(
     y_dis = (total_full_beads+1)*block_dy + max([0, ongoing_bead_time-x_travel_time])*y_speed
     if y_dis > y_max:
         raise ValueError("maximum y is achieved. Decrease time or increase maximum y")
-
-    if (x_dis- block_dx/2) % block_dx < 1e-5 : # to get rid of float precision
+    # print(round((x_dis- block_dx/2), 8) % block_dx, x_dis)
+    if (x_dis- block_dx/2) % block_dx < 1e-5 or  (x_dis- block_dx/2) % block_dx > block_dx - 1e-10: # to get rid of float precision
         new_block = True
     else:
         new_block = False 
@@ -360,9 +360,11 @@ def get_t_boundary_data(
             np.full((bbr, 1), time), 
             bottom_boundary_data, 
             np.full((bbr, 1), heat_xy[0]), 
-            np.full((bbr, 1), heat_xy[1])))
+            np.full((bbr, 1), heat_xy[1]), 
+            np.full((bbr, 1), 0), 
+            np.full((bbr, 1), -1)))
     else:
-        bottom_boundary_data = np.empty((0, 5))
+        bottom_boundary_data = np.empty((0, 7))
     lbr = left_boundary_data.shape[0]# left boundary rows
     rbr = right_boundary_data.shape[0]# right boundary rows
     mbr = mid_boundary_data.shape[0]# mid boundary rows
@@ -373,27 +375,37 @@ def get_t_boundary_data(
         np.full((lbr, 1), time), 
         left_boundary_data, 
         np.full((lbr, 1), heat_xy[0]), 
-        np.full((lbr, 1), heat_xy[1])))
+        np.full((lbr, 1), heat_xy[1]), 
+        np.full((lbr, 1), -1), 
+        np.full((lbr, 1), 0)))
     right_boundary_data = np.hstack((
         np.full((rbr, 1), time), 
         right_boundary_data, 
         np.full((rbr, 1), heat_xy[0]), 
-        np.full((rbr, 1), heat_xy[1])))
+        np.full((rbr, 1), heat_xy[1]), 
+        np.full((rbr, 1), 1), 
+        np.full((rbr, 1), 0)))
     mid_boundary_data = np.hstack((
         np.full((mbr, 1), time), 
         mid_boundary_data, 
         np.full((mbr, 1), heat_xy[0]), 
-        np.full((mbr, 1), heat_xy[1])))
+        np.full((mbr, 1), heat_xy[1]), 
+        np.full((mbr, 1), -2*current_direction + 1), 
+        np.full((mbr, 1), 0)))
     top_left_boundary_data = np.hstack((
         np.full((tlbr, 1), time), 
         top_left_boundary_data, 
         np.full((tlbr, 1), heat_xy[0]), 
-        np.full((tlbr, 1), heat_xy[1])))
+        np.full((tlbr, 1), heat_xy[1]), 
+        np.full((tlbr, 1), 0), 
+        np.full((tlbr, 1), 1)))
     top_right_boundary_data = np.hstack((
         np.full((trbr, 1), time), 
         top_right_boundary_data, 
         np.full((trbr, 1), heat_xy[0]), 
-        np.full((trbr, 1), heat_xy[1])))
+        np.full((trbr, 1), heat_xy[1]), 
+        np.full((trbr, 1), 0), 
+        np.full((trbr, 1), 1)))
     
     return (left_boundary_data,
             right_boundary_data,
@@ -434,7 +446,7 @@ def get_newblock_data(
 ):
     final_new_block_data = np.empty((0, 5))
     nbt = new_block_times(x_max, block_dx, block_dy, x_speed, y_speed, start_t, tot_time)
-    print(len(nbt), len(nbt)*density*block_dx*block_dy)
+    print(nbt)
     for time in nbt:
         mid_xy, current_direction, new_block, heat_xy = get_pointer_cords(
             time, x_speed, y_speed, 
@@ -448,6 +460,7 @@ def get_newblock_data(
             start_t = start_t
             )
         if new_block:
+            print(time)
             new_data = gen_data_in_rectangle(
                 [mid_xy[0]-block_dx/2, mid_xy[0]+block_dx/2], 
                 [mid_xy[1]-block_dy, mid_xy[1]], 
@@ -540,7 +553,7 @@ def get_boundary_data(
         all_times = np.linspace(start_t, tot_time, int(t_density*(tot_time-start_t)))
     else:
         raise ValueError("t_grid can only be uniform or random")
-    final_boundary_data = [np.empty((0, 5)),]*len(groups)
+    final_boundary_data = [np.empty((0, 7)),]*len(groups)
     for time in all_times:
         tbd = get_t_boundary_data(
             time, x_speed, y_speed, 
@@ -561,68 +574,135 @@ def get_boundary_data(
     return final_boundary_data
         
     
-    
+def gen_2ddata(
+        tot_time, x_speed, y_speed, 
+        movement_type = "bidirectional", 
+        if_continuous = False, 
+        if_discrete = True, 
+        x_max = 6, 
+        y_max = 6, 
+        block_dx = 0.3, 
+        block_dy = 0.3,
+        start_t = 0.0, 
+        mode = "random", 
+        ic_density = 500,
+        wall_density = 10, 
+        new_density = 100,
+        boundary_density = 50,
+        bc_density = 50,
+        increase_latest_block_data = True,
+        increased_boundary_data = True,
+        boundary_width = None, 
+        top_boundary_layers = 2,
+        t_grid = "random",
+        t_density = 10, 
+        bottom_data = True,
+        bc_groups = [[0, 1, 2, 3, 4], [5,]]      
+):
 
-if __name__=="__main__":
     gnbd = get_newblock_data(
-            10, 1, 1, 
-            movement_type = "bidirectional", 
-            if_continuous = False, 
-            if_discrete = True, 
-            x_max = 10, 
-            y_max = 10, 
-            block_dx = 0.5, 
-            block_dy = 0.5,
-            start_t = 0.0, 
-            mode = "random", 
-            density = 500
-    )
-
-
-    gwd = get_wall_data(
-            10, 1, 1, 
-            movement_type = "bidirectional", 
-            if_continuous = False, 
-            if_discrete = True, 
-            x_max = 10, 
-            y_max = 10, 
-            block_dx = 0.5, 
-            block_dy = 0.5,
-            start_t = 0.0, 
-            mode = "random", 
-            wall_density = 10, 
-            new_density = 100,
-            boundary_density = 50,
-            increase_latest_block_data = True,
-            increased_boundary_data = True,
-            boundary_width = None, 
-            top_boundary_layers = 2,
-            t_grid = "random",
-            t_density = 10     
+            tot_time, x_speed, y_speed, 
+            movement_type = movement_type, 
+            if_continuous = if_continuous, 
+            if_discrete = if_discrete, 
+            x_max = x_max, 
+            y_max = y_max, 
+            block_dx = block_dx, 
+            block_dy = block_dy,
+            start_t = start_t, 
+            mode = mode, 
+            density = ic_density
     )
         
-
-    gbd = get_boundary_data(
-            10, 1, 1, 
-            movement_type = "bidirectional", 
-            if_continuous = False, 
-            if_discrete = True, 
-            x_max = 10, 
-            y_max = 10, 
-            block_dx = 0.5, 
-            block_dy = 0.5,
-            start_t = 0.0, 
-            mode = "random", 
-            density = 50, 
-            bottom_data = True,
-            groups = [[0, 1, 2], [3, 4], [5,]], 
-            t_grid = "random",
-            t_density = 10     
+    gwd = get_wall_data(
+            tot_time, x_speed, y_speed, 
+            movement_type = movement_type, 
+            if_continuous = if_continuous, 
+            if_discrete = if_discrete, 
+            x_max = x_max, 
+            y_max = y_max, 
+            block_dx = block_dx, 
+            block_dy = block_dy,
+            start_t = start_t, 
+            mode = mode, 
+            wall_density = wall_density, 
+            new_density = new_density,
+            boundary_density = boundary_density,
+            increase_latest_block_data = increase_latest_block_data,
+            increased_boundary_data = increased_boundary_data,
+            boundary_width = boundary_width, 
+            top_boundary_layers = top_boundary_layers,
+            t_grid = t_grid,
+            t_density = t_density     
     )
+    gbd = get_boundary_data(
+            tot_time, x_speed, y_speed, 
+            movement_type = movement_type, 
+            if_continuous = if_continuous, 
+            if_discrete = if_discrete, 
+            x_max = x_max, 
+            y_max = y_max, 
+            block_dx = block_dx, 
+            block_dy = block_dy,
+            start_t = start_t, 
+            mode = mode, 
+            density = bc_density, 
+            bottom_data = bottom_data,
+            groups = bc_groups, 
+            t_grid = t_grid,
+            t_density = t_density     
+    )
+    return gnbd, gwd, gbd
+
+def nd_data(gnbd, gwd, gbd, ps, ti = [0,], xs = [1, 2, 3, 4]):
+    gnbd[:,ti] = gnbd[:,ti]/ps["tc"]
+    gnbd[:,xs] = gnbd[:,xs]/ps["lc"]
+    gwd[:,ti] = gwd[:,ti]/ps["tc"]
+    gwd[:,xs] = gwd[:,xs]/ps["lc"]
+    for i in range(len(gbd)):
+        gbd[i][:,ti] = gbd[i][:,ti]/ps["tc"]
+        gbd[i][:,xs] = gbd[i][:,xs]/ps["lc"]
+    return gnbd, gwd, gbd
+
+def nnd_data(gnbd, gwd, gbd, ti = [0,], xs = [1, 2], apply_inds = [3, 4]):
+    
+    def fit_min_max(array):
+        return 2*(array-np.min(array))/(np.max(array)-np.min(array)) - 1
+    def apply_min_max(apply_on, apply_from):
+        return 2*(apply_on-np.min(apply_from))/(np.max(apply_from)-np.min(apply_from)) - 1
+  
+    gwd[:,ti] = fit_min_max(gwd[:,ti])
+
+    gwd[:,xs] = fit_min_max(gwd[:,xs])
+    gwd[:,apply_inds] = apply_min_max(gwd[:,apply_inds], gwd[:,xs])
+    gnbd[:,ti] = apply_min_max(gnbd[:,ti], gwd[:,ti])
+    gnbd[:,xs] = apply_min_max(gnbd[:,xs], gwd[:,xs])
+    gnbd[:,apply_inds] = apply_min_max(gnbd[:,apply_inds], gwd[:,xs])
+    for i in range(len(gbd)):
+        gbd[i][:,ti] = apply_min_max(gbd[i][:,ti], gwd[:,ti])
+        gbd[i][:,xs] = apply_min_max(gbd[i][:,xs], gwd[:,xs])
+        gbd[i][:,apply_inds] = apply_min_max(gbd[i][:,apply_inds], gwd[:,xs])
+    return gnbd, gwd, gbd
+
+
+if __name__=="__main__":
+    ps = {}
+    ps["tc"] = 2
+    ps["lc"] = 2
+    gnbd, gwd, gbd = gen_2ddata(10, 2/3, 2/3) 
     print(gnbd.shape)
     print(gwd.shape)
     print([gbdi.shape for gbdi in gbd])
-
+    gnbd, gwd, gbd = nd_data(gnbd, gwd, gbd, ps, ti = [0,], xs = [1, 2, 3, 4])
+    print("*****************************")
+    print(gnbd.shape)
+    print(gwd.shape)
+    print([gbdi.shape for gbdi in gbd])
+    gnbd, gwd, gbd = nnd_data(gnbd, gwd, gbd, ti = [0,], xs = [1, 2], apply_inds = [3, 4])
+    print("*****************************")
+    print(gnbd.shape)
+    print(gwd.shape)
+    print([gbdi.shape for gbdi in gbd])
 
 
 
