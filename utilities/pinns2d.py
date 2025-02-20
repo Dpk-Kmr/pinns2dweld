@@ -6,10 +6,12 @@ import random
 
 ########################  check ode code perfectly  ######################################
 def main_ode(T, X, Q, ps):
+    # create_graph keep track of previous derivatives
     dT_dX = torch.autograd.grad(T, X, grad_outputs=torch.ones_like(T), create_graph=True, allow_unused = True)[0]
-    print(dT_dX)
-    dT_dt  = dT_dX[:, 0:1]
-    d2T_dX2 = torch.autograd.grad(dT_dX[:, 0], X, grad_outputs=torch.ones_like(dT_dX[:, 0]), create_graph=True, allow_unused = True)[0][:, 1:]
+    dT_dt  = dT_dX[:, (0,)]
+    sec_der1 = torch.autograd.grad(dT_dX[:, (1,)], X, grad_outputs=torch.ones_like(dT_dX[:, (1,)]), create_graph=True, allow_unused = True)[0][:, (1,)]
+    sec_der2 = torch.autograd.grad(dT_dX[:, (2,)], X, grad_outputs=torch.ones_like(dT_dX[:, (2,)]), create_graph=True, allow_unused = True)[0][:, (2,)]
+    d2T_dX2 = torch.hstack((sec_der1, sec_der2))
     return dT_dt\
           - (ps["k"]/(ps["rho"]*ps["cp"]))*(ps["tc"]/(ps["lc"]**2))*(torch.sum(d2T_dX2, dim = 1).reshape(-1, 1)) \
             - Q
@@ -40,6 +42,9 @@ if __name__ == "__main__":
     import torch.nn as nn
     import torch.optim as optim
     import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib import animation
+
 
     # Define the neural network model
     class SimpleNN(nn.Module):
@@ -78,7 +83,7 @@ if __name__ == "__main__":
     ps["h_force"] = 2e-2*1e2
     ps["T_ref"] = 3000
 
-    gnbd, gwd, gbd = gen_2ddata(4, 2/3, 2/3) 
+    gnbd, gwd, gbd = gen_2ddata(10, 2/3, 2/3) 
 
     gnbd, gwd, gbd = nd_data(gnbd, gwd, gbd, ps, ti = [0,], xs = [1, 2, 3, 4])
 
@@ -95,16 +100,17 @@ if __name__ == "__main__":
     model = SimpleNN()
     criterion = nn.MSELoss()  # Mean Squared Error loss (for regression)
     optimizer = optim.Adam(model.parameters(), lr=0.01)  # Adam optimizer
-    gnbd_input = gnbd[:, :3].clone().detach().requires_grad_(True)
-    gwd_input = gwd[:, :3].clone().detach().requires_grad_(True)
-    gbd_input1 = gbd[0][:, :3].clone().detach().requires_grad_(True)
-    gbd_input2 = gbd[1][:, :3].clone().detach().requires_grad_(True)
+    gnbd_input = gnbd[:, :3].clone().detach()
+    gwd_input = gwd[:, :3].clone().detach()
+    gbd_input1 = gbd[0][:, :3].clone().detach()
+    gbd_input2 = gbd[1][:, :3].clone().detach()
     # Training loop
-    num_epochs = 1
+    num_epochs = 20
     print(gnbd_input.size())
     print(gwd_input.size())
     print(gbd_input1.size())
     print(gbd_input2.size())
+    # rs for rows
     gnbd_rs = gnbd_input.size()[0]
     gwd_rs = gwd_input.size()[0]
     gbd1_rs = gbd_input1.size()[0]
@@ -116,28 +122,43 @@ if __name__ == "__main__":
         gbd1_randoms = random.sample(range(gbd1_rs), gbd1_rs)
         gbd2_randoms = random.sample(range(gbd2_rs), gbd2_rs)
         data_wins = np.arange(0, 1+training_fraction, training_fraction)
+        epoch_losses = [0, 0, 0, 0] 
+        batch_count = 0
         for s, e in zip(data_wins[:-1], data_wins[1:]):
             optimizer.zero_grad()
+            T_gnbd_inputs = gnbd_input[gnbd_randoms[int(gnbd_rs*s):int(gnbd_rs*e)]].requires_grad_(True)
+            T_gnbd = model(T_gnbd_inputs)
+            T_gwd_inputs = gwd_input[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)]].requires_grad_(True)
+            T_gwd = model(T_gwd_inputs)
+            T_gbd1_inputs = gbd_input1[gbd1_randoms[int(gbd1_rs*s):int(gbd1_rs*e)]].requires_grad_(True)
+            T_gbd1 = model(T_gbd1_inputs)  
+            T_gbd2_inputs = gbd_input2[gbd2_randoms[int(gbd2_rs*s):int(gbd2_rs*e)]].requires_grad_(True)
+            T_gbd2 = model(T_gbd2_inputs)   
 
-            T_gnbd = model(gnbd_input[gnbd_randoms[int(gnbd_rs*s):int(gnbd_rs*e)]])
-            T_gwd = model(gwd_input[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)]])
-            T_gbd1 = model(gbd_input1[gbd1_randoms[int(gbd1_rs*s):int(gbd1_rs*e)]])  
-            T_gbd2 = model(gbd_input2[gbd2_randoms[int(gbd2_rs*s):int(gbd2_rs*e)]])   
-
-            Q = get_2dQ(gwd_input[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)],1:3], gwd[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)],3:5], ps)**2
-            ode_loss = torch.mean(main_ode(T_gwd, gwd_input[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)]], Q, ps)**2)
+            Q = get_2dQ(gwd_input[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)],1:3], gwd[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)],3:5], ps)
+            ode_loss = torch.mean(main_ode(T_gwd, T_gwd_inputs, Q, ps)**2)
             ic_loss = torch.mean(ic_eq(T_gnbd, ps)**2)
-            bc1_loss = bc_eq(T_gbd1, gbd_input1[gbd1_randoms[int(gbd1_rs*s):int(gbd1_rs*e)]], gbd[0][int(gbd1_rs*s):int(gbd1_rs*e),5:], ps, if_bottom = False)
-            bc2_loss = bc_eq(T_gbd2, gbd_input2[gbd2_randoms[int(gbd2_rs*s):int(gbd2_rs*e)]], gbd[1][int(gbd2_rs*s):int(gbd2_rs*e),5:], ps, if_bottom = True)
-            final_bc_loss = torch.mean(torch.vstack((bc1_loss, bc2_loss))**2)
-            final_loss = ode_loss + ic_loss + final_bc_loss
+            bc1_loss = bc_eq(T_gbd1, T_gbd1_inputs, gbd[0][int(gbd1_rs*s):int(gbd1_rs*e),5:], ps, if_bottom = False)
+            bc2_loss = bc_eq(T_gbd2, T_gbd2_inputs, gbd[1][int(gbd2_rs*s):int(gbd2_rs*e),5:], ps, if_bottom = True)
+            # final_bc_loss = torch.mean(torch.vstack((bc1_loss, bc2_loss))**2)
+            final_bc_loss = (torch.mean(bc1_loss**2) + torch.mean(bc2_loss**2))/2
+            final_loss = ode_loss + 100*ic_loss + 100*final_bc_loss
 
             
             final_loss.backward()
             optimizer.step()
+            epoch_losses[0] += final_loss.item()
+            epoch_losses[1] += ode_loss.item()
+            epoch_losses[2] += ic_loss.item()
+            epoch_losses[3] += final_bc_loss.item()
+            batch_count += 1
 
-            # if epoch % 1 == 0:
-            print(f"Epoch [{epoch}/{num_epochs}], Loss: {ode_loss.item():.8f}, {ic_loss.item():.8f}, {final_bc_loss.item():.8f}, {final_loss.item():.8f}")
+        epoch_l = [i / batch_count if batch_count > 0 else float('inf') for i in epoch_losses]
+        print(f"[{epoch+1}/{num_epochs}], {epoch_l[0]:.8f}, {epoch_l[1]:.8f}, {epoch_l[2]:.8f}, {epoch_l[3]:.8f}")
+        # if epoch % 1 == 0:
+        #     print(T_gwd[:5], T_gwd_inputs[:5])
+            # # if epoch % 1 == 0:
+            # print(f"Epoch [{epoch}/{num_epochs}], Loss: {ode_loss.item():.8f}, {ic_loss.item():.8f}, {final_bc_loss.item():.8f}, {final_loss.item():.8f}")
 
     # testing data
     def get_tdata(time):
@@ -154,7 +175,7 @@ if __name__ == "__main__":
 
 
     def get_data(frame):
-        t = 2*frame
+        t = frame/100
         data = get_tdata(t)
         txy_data =torch.tensor(data[:,:3], dtype = torch.float32)
         T_data = model(txy_data)
@@ -174,7 +195,10 @@ if __name__ == "__main__":
     ax.grid(False)
     global colors
     colors = []
-    scatter_wall = ax.scatter([], [], s=6, c=colors)
+    scatter_wall = ax.scatter([], [], s=0.5, c=colors)
+    scatter_wall = ax.scatter([], [], s=0.5, c=[], cmap='plasma')
+    scatter_wall.set_clim(vmin=0.0, vmax=1.0)  
+    cbar = fig.colorbar(scatter_wall, ax=ax)
 
     def init():
 
@@ -189,14 +213,14 @@ if __name__ == "__main__":
         data = get_data(frame)
         xy_data = data[:,1:3].detach().clone().numpy()
         colors = data[:,3].detach().clone().numpy()
+        print(colors)
 
         scatter_wall.set_offsets(xy_data)
         scatter_wall.set_array(colors)
-
         return (scatter_wall,)
 
     # Create the animation
-    anim = animation.FuncAnimation(fig, update, frames=10, init_func=init,
+    anim = animation.FuncAnimation(fig, update, frames=1000, init_func=init,
                                 interval=1000, blit=True, repeat=True)
 
     plt.show()

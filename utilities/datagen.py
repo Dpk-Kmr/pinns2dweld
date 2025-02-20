@@ -585,7 +585,7 @@ def gen_2ddata(
         block_dy = 0.3,
         start_t = 0.0, 
         mode = "random", 
-        ic_density = 500,
+        ic_density = 5000,
         wall_density = 10, 
         new_density = 100,
         boundary_density = 50,
