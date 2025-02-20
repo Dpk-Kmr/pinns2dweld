@@ -1,11 +1,13 @@
 from datagen import *
 import torch
+import random
 
 
 
-
+########################  check ode code perfectly  ######################################
 def main_ode(T, X, Q, ps):
     dT_dX = torch.autograd.grad(T, X, grad_outputs=torch.ones_like(T), create_graph=True, allow_unused = True)[0]
+    print(dT_dX)
     dT_dt  = dT_dX[:, 0:1]
     d2T_dX2 = torch.autograd.grad(dT_dX[:, 0], X, grad_outputs=torch.ones_like(dT_dX[:, 0]), create_graph=True, allow_unused = True)[0][:, 1:]
     return dT_dt\
@@ -76,7 +78,7 @@ if __name__ == "__main__":
     ps["h_force"] = 2e-2*1e2
     ps["T_ref"] = 3000
 
-    gnbd, gwd, gbd = gen_2ddata(100, 2/3, 2/3) 
+    gnbd, gwd, gbd = gen_2ddata(4, 2/3, 2/3) 
 
     gnbd, gwd, gbd = nd_data(gnbd, gwd, gbd, ps, ti = [0,], xs = [1, 2, 3, 4])
 
@@ -98,30 +100,44 @@ if __name__ == "__main__":
     gbd_input1 = gbd[0][:, :3].clone().detach().requires_grad_(True)
     gbd_input2 = gbd[1][:, :3].clone().detach().requires_grad_(True)
     # Training loop
-    num_epochs = 0
+    num_epochs = 1
+    print(gnbd_input.size())
+    print(gwd_input.size())
+    print(gbd_input1.size())
+    print(gbd_input2.size())
+    gnbd_rs = gnbd_input.size()[0]
+    gwd_rs = gwd_input.size()[0]
+    gbd1_rs = gbd_input1.size()[0]
+    gbd2_rs = gbd_input2.size()[0]
+    training_fraction = 0.01
     for epoch in range(num_epochs):
-        optimizer.zero_grad()
+        gnbd_randoms = random.sample(range(gnbd_rs), gnbd_rs)
+        gwd_randoms = random.sample(range(gwd_rs), gwd_rs)
+        gbd1_randoms = random.sample(range(gbd1_rs), gbd1_rs)
+        gbd2_randoms = random.sample(range(gbd2_rs), gbd2_rs)
+        data_wins = np.arange(0, 1+training_fraction, training_fraction)
+        for s, e in zip(data_wins[:-1], data_wins[1:]):
+            optimizer.zero_grad()
 
-        T_gnbd = model(gnbd_input)
-        T_gwd = model(gwd_input)
-        T_gbd1 = model(gbd_input1)  
-        T_gbd2 = model(gbd_input2)   
+            T_gnbd = model(gnbd_input[gnbd_randoms[int(gnbd_rs*s):int(gnbd_rs*e)]])
+            T_gwd = model(gwd_input[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)]])
+            T_gbd1 = model(gbd_input1[gbd1_randoms[int(gbd1_rs*s):int(gbd1_rs*e)]])  
+            T_gbd2 = model(gbd_input2[gbd2_randoms[int(gbd2_rs*s):int(gbd2_rs*e)]])   
 
-        Q = get_2dQ(gwd_input[:,1:3], gwd[:,3:5], ps)**2
-        ode_loss = torch.mean(main_ode(T_gwd, gwd_input, Q, ps)**2)
-        ic_loss = torch.mean(ic_eq(T_gnbd, ps)**2)
-        bc1_loss = bc_eq(T_gbd1, gbd_input1, gbd[0][:,5:], ps, if_bottom = False)
-        bc2_loss = bc_eq(T_gbd2, gbd_input2, gbd[1][:,5:], ps, if_bottom = True)
-        final_bc_loss = torch.mean(torch.vstack((bc1_loss, bc2_loss))**2)
-        final_loss = ode_loss + ic_loss + final_bc_loss
-        # print(ode_loss, ic_loss, final_bc_loss)
-        
-        final_loss.backward()
-        optimizer.step()
+            Q = get_2dQ(gwd_input[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)],1:3], gwd[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)],3:5], ps)**2
+            ode_loss = torch.mean(main_ode(T_gwd, gwd_input[gwd_randoms[int(gwd_rs*s):int(gwd_rs*e)]], Q, ps)**2)
+            ic_loss = torch.mean(ic_eq(T_gnbd, ps)**2)
+            bc1_loss = bc_eq(T_gbd1, gbd_input1[gbd1_randoms[int(gbd1_rs*s):int(gbd1_rs*e)]], gbd[0][int(gbd1_rs*s):int(gbd1_rs*e),5:], ps, if_bottom = False)
+            bc2_loss = bc_eq(T_gbd2, gbd_input2[gbd2_randoms[int(gbd2_rs*s):int(gbd2_rs*e)]], gbd[1][int(gbd2_rs*s):int(gbd2_rs*e),5:], ps, if_bottom = True)
+            final_bc_loss = torch.mean(torch.vstack((bc1_loss, bc2_loss))**2)
+            final_loss = ode_loss + ic_loss + final_bc_loss
 
-        if epoch % 1 == 0:
+            
+            final_loss.backward()
+            optimizer.step()
+
+            # if epoch % 1 == 0:
             print(f"Epoch [{epoch}/{num_epochs}], Loss: {ode_loss.item():.8f}, {ic_loss.item():.8f}, {final_bc_loss.item():.8f}, {final_loss.item():.8f}")
-
 
     # testing data
     def get_tdata(time):
@@ -140,7 +156,10 @@ if __name__ == "__main__":
     def get_data(frame):
         t = 2*frame
         data = get_tdata(t)
-        return torch.tensor(data[:,1:3], dtype = torch.float32)
+        txy_data =torch.tensor(data[:,:3], dtype = torch.float32)
+        T_data = model(txy_data)
+        
+        return torch.hstack((txy_data, T_data))
 
     # # Define figure dimensions
     x_max, y_max = 6, 6
@@ -153,39 +172,28 @@ if __name__ == "__main__":
     ax.set_ylabel("Y Coordinate")
     ax.set_title("Welding Wall")
     ax.grid(False)
-
-    # # Initialize scatter plots (each with its own color)
-    scatter_wall = ax.scatter([], [], s=6, c="black")
-    # scatter_b0   = ax.scatter([], [], s=6, c="pink")
-    # scatter_b1   = ax.scatter([], [], s=6, c="red")
-    # scatter_b2   = ax.scatter([], [], s=6, c="blue")
-    # scatter_b3   = ax.scatter([], [], s=6, c="green")
-    # scatter_b4   = ax.scatter([], [], s=6, c="yellow")
-    # scatter_b5   = ax.scatter([], [], s=6, c="orange")
+    global colors
+    colors = []
+    scatter_wall = ax.scatter([], [], s=6, c=colors)
 
     def init():
-        # Initialize all scatter plots with an empty (0,2) array.
+
         empty_offsets = np.empty((0, 2))
+        colors =[]
         scatter_wall.set_offsets(empty_offsets)
-    #     scatter_b0.set_offsets(empty_offsets)
-    #     scatter_b1.set_offsets(empty_offsets)
-    #     scatter_b2.set_offsets(empty_offsets)
-    #     scatter_b3.set_offsets(empty_offsets)
-    #     scatter_b4.set_offsets(empty_offsets)
-    #     scatter_b5.set_offsets(empty_offsets)
-        return (scatter_wall,)#, scatter_b0, scatter_b1, scatter_b2, scatter_b3, scatter_b4, scatter_b5
+        scatter_wall.set_array(colors)
+
+        return (scatter_wall,)
 
     def update(frame):
         data = get_data(frame)
-        # Each element in data is an array of shape (n, 2)
-        scatter_wall.set_offsets(np.array(data))
-    #     scatter_b0.set_offsets(data[1])
-    #     scatter_b1.set_offsets(data[2])
-    #     scatter_b2.set_offsets(data[3])
-    #     scatter_b3.set_offsets(data[4])
-    #     scatter_b4.set_offsets(data[5])
-    #     scatter_b5.set_offsets(data[6])
-        return (scatter_wall,)# scatter_b0, scatter_b1, scatter_b2, scatter_b3, scatter_b4, scatter_b5
+        xy_data = data[:,1:3].detach().clone().numpy()
+        colors = data[:,3].detach().clone().numpy()
+
+        scatter_wall.set_offsets(xy_data)
+        scatter_wall.set_array(colors)
+
+        return (scatter_wall,)
 
     # Create the animation
     anim = animation.FuncAnimation(fig, update, frames=10, init_func=init,

@@ -710,79 +710,79 @@ if __name__=="__main__":
 
 
     
-    
-    
+        
+        
 
-def get_data(frame):
-    t = frame/2
-    all_boundary_data = get_t_boundary_data(
-        t, 1, 1, 
-        movement_type = "bidirectional",
-        mode = "random",
-        block_dx = 0.5)
-    wall_data = get_t_wall_data(
-        t, 1, 1, 
-        movement_type = "bidirectional", 
-        mode = "random",
-        block_dx = 0.5)
-    # Remove the time column (first column) before plotting.
-    return (
-        wall_data[:, 1:],
-        all_boundary_data[0][:, 1:3],
-        all_boundary_data[1][:, 1:3],
-        all_boundary_data[2][:, 1:3],
-        all_boundary_data[3][:, 1:3],
-        all_boundary_data[4][:, 1:3],
-        all_boundary_data[5][:, 1:3]
-    )
+    def get_data(frame):
+        t = frame/2
+        all_boundary_data = get_t_boundary_data(
+            t, 1, 1, 
+            movement_type = "bidirectional",
+            mode = "random",
+            block_dx = 0.5)
+        wall_data = get_t_wall_data(
+            t, 1, 1, 
+            movement_type = "bidirectional", 
+            mode = "random",
+            block_dx = 0.5)
+        # Remove the time column (first column) before plotting.
+        return (
+            wall_data[:, 1:],
+            all_boundary_data[0][:, 1:3],
+            all_boundary_data[1][:, 1:3],
+            all_boundary_data[2][:, 1:3],
+            all_boundary_data[3][:, 1:3],
+            all_boundary_data[4][:, 1:3],
+            all_boundary_data[5][:, 1:3]
+        )
 
-# Define figure dimensions
-x_max, y_max = 10, 10
+    # Define figure dimensions
+    x_max, y_max = 10, 10
 
-# Prepare the figure and axis
-fig, ax = plt.subplots(figsize=(8, 6))
-ax.set_xlim(-1, x_max+1)
-ax.set_ylim(-1, y_max+1)
-ax.set_xlabel("X Coordinate")
-ax.set_ylabel("Y Coordinate")
-ax.set_title("Welding Wall")
-ax.grid(False)
+    # Prepare the figure and axis
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_xlim(-1, x_max+1)
+    ax.set_ylim(-1, y_max+1)
+    ax.set_xlabel("X Coordinate")
+    ax.set_ylabel("Y Coordinate")
+    ax.set_title("Welding Wall")
+    ax.grid(False)
 
-# Initialize scatter plots (each with its own color)
-scatter_wall = ax.scatter([], [], s=6, c="black")
-scatter_b0   = ax.scatter([], [], s=6, c="pink")
-scatter_b1   = ax.scatter([], [], s=6, c="red")
-scatter_b2   = ax.scatter([], [], s=6, c="blue")
-scatter_b3   = ax.scatter([], [], s=6, c="green")
-scatter_b4   = ax.scatter([], [], s=6, c="yellow")
-scatter_b5   = ax.scatter([], [], s=6, c="orange")
+    # Initialize scatter plots (each with its own color)
+    scatter_wall = ax.scatter([], [], s=6, c="black")
+    scatter_b0   = ax.scatter([], [], s=6, c="pink")
+    scatter_b1   = ax.scatter([], [], s=6, c="red")
+    scatter_b2   = ax.scatter([], [], s=6, c="blue")
+    scatter_b3   = ax.scatter([], [], s=6, c="green")
+    scatter_b4   = ax.scatter([], [], s=6, c="yellow")
+    scatter_b5   = ax.scatter([], [], s=6, c="orange")
 
-def init():
-    # Initialize all scatter plots with an empty (0,2) array.
-    empty_offsets = np.empty((0, 2))
-    scatter_wall.set_offsets(empty_offsets)
-    scatter_b0.set_offsets(empty_offsets)
-    scatter_b1.set_offsets(empty_offsets)
-    scatter_b2.set_offsets(empty_offsets)
-    scatter_b3.set_offsets(empty_offsets)
-    scatter_b4.set_offsets(empty_offsets)
-    scatter_b5.set_offsets(empty_offsets)
-    return scatter_wall, scatter_b0, scatter_b1, scatter_b2, scatter_b3, scatter_b4, scatter_b5
+    def init():
+        # Initialize all scatter plots with an empty (0,2) array.
+        empty_offsets = np.empty((0, 2))
+        scatter_wall.set_offsets(empty_offsets)
+        scatter_b0.set_offsets(empty_offsets)
+        scatter_b1.set_offsets(empty_offsets)
+        scatter_b2.set_offsets(empty_offsets)
+        scatter_b3.set_offsets(empty_offsets)
+        scatter_b4.set_offsets(empty_offsets)
+        scatter_b5.set_offsets(empty_offsets)
+        return scatter_wall, scatter_b0, scatter_b1, scatter_b2, scatter_b3, scatter_b4, scatter_b5
 
-def update(frame):
-    data = get_data(frame)
-    # Each element in data is an array of shape (n, 2)
-    scatter_wall.set_offsets(data[0])
-    scatter_b0.set_offsets(data[1])
-    scatter_b1.set_offsets(data[2])
-    scatter_b2.set_offsets(data[3])
-    scatter_b3.set_offsets(data[4])
-    scatter_b4.set_offsets(data[5])
-    scatter_b5.set_offsets(data[6])
-    return scatter_wall, scatter_b0, scatter_b1, scatter_b2, scatter_b3, scatter_b4, scatter_b5
+    def update(frame):
+        data = get_data(frame)
+        # Each element in data is an array of shape (n, 2)
+        scatter_wall.set_offsets(data[0])
+        scatter_b0.set_offsets(data[1])
+        scatter_b1.set_offsets(data[2])
+        scatter_b2.set_offsets(data[3])
+        scatter_b3.set_offsets(data[4])
+        scatter_b4.set_offsets(data[5])
+        scatter_b5.set_offsets(data[6])
+        return scatter_wall, scatter_b0, scatter_b1, scatter_b2, scatter_b3, scatter_b4, scatter_b5
 
-# Create the animation
-anim = animation.FuncAnimation(fig, update, frames=200, init_func=init,
-                               interval=1000, blit=True, repeat=True)
+    # Create the animation
+    anim = animation.FuncAnimation(fig, update, frames=200, init_func=init,
+                                interval=1000, blit=True, repeat=True)
 
-plt.show()
+    plt.show()
